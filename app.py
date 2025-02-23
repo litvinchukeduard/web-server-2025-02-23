@@ -2,8 +2,10 @@ from http.server import BaseHTTPRequestHandler
 import socketserver
 from email.parser import BytesParser
 from email.policy import default
+from PIL import Image, ImageOps, ImageFilter
+import mimetypes
 
-PORT = 8000
+PORT = 8081
 
 class ImageFilerServer(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -13,6 +15,15 @@ class ImageFilerServer(BaseHTTPRequestHandler):
             self.end_headers()
             with open('templates/index.html', 'rb') as file:
                 self.wfile.write(file.read())
+        elif self.path.startswith('/static/'):
+            file_path = self.path.lstrip('/')
+            mimetype = mimetypes.guess_type(file_path)
+            self.send_response(200)
+            self.send_header('Content-Type', 'image/png')
+            self.end_headers()
+            with open(file_path, 'rb') as file:
+                self.wfile.write(file.read())
+        
 
     def do_POST(self):
         content_length = int(self.headers['Content-Length'])
@@ -37,7 +48,26 @@ class ImageFilerServer(BaseHTTPRequestHandler):
         with open(filename, 'wb') as file:
             file.write(payload)
 
-        filter = parts_dict['filter'][1]
+        filter = parts_dict['filter'][1].decode().strip()
+        print(filter)
+
+        pillow_image = Image.open(filename)
+        if filter == 'greyscale':
+            pillow_image = ImageOps.grayscale(pillow_image) 
+        elif filter == 'inversion':
+            pillow_image = ImageOps.invert(pillow_image)
+        elif filter == 'blur':
+            pillow_image = pillow_image.filter(ImageFilter.BLUR)
+        
+        pillow_image.save('static/filtered_image.png')
+
+        self.send_response(200)
+        self.send_header('Content-type', 'text/html')
+        self.end_headers()
+        self.wfile.write('<img src="static/filtered_image.png"/>'.encode())
+        
+        
+        
 
 if __name__ == '__main__':
     with socketserver.TCPServer(("", PORT), ImageFilerServer) as httpd:
